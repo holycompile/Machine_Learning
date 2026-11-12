@@ -2,7 +2,7 @@
 
 > **Based on Lecture:** 100 Days of Deep Learning » D69 Multihead Attention  
 > **Example Sequence:** `"money bank"` & `"The man saw the astronomer with a telescope"`  
-> **Related Document:** [Single-Head Self-Attention Notes](file:///d:/Jupyter_Executions/self_attention_notes.md)
+> **Related Document:** [Single-Head Self-Attention Notes](file:///d:/Machine_Learning/self_attention_notes.md)
 
 ---
 
@@ -272,19 +272,164 @@ $$\text{where } \text{head}_i = \text{Attention}(Q W_i^Q, K W_i^K, V W_i^V)$$
 
 ---
 
-## 6. Standard Transformer Dimensions (Vaswani et al. 2017)
+### Detailed Matrix Mechanics: Concatenation and Output Projection $W^O$
+*(As drawn on the Lecture Chalkboard: `assets/mha_concat_wo_2heads.jpg`)*
 
-In production Transformers (like BERT-base and standard Transformer):
-| Parameter | Symbol | Value |
-|---|---|---|
-| Model Hidden Dimension | $d_{model}$ | **512** |
-| Number of Attention Heads | $h$ | **8** |
-| Dimension per Head | $d_k = d_v = d_{model} / h$ | **$512 / 8 = 64$** |
-| Concat Dimension before $W^O$ | $h \times d_v$ | **$8 \times 64 = 512$** |
-| Output Projection Matrix $W^O$ | $W^O$ | **$512 \times 512$** |
+```
+╔══════════════════════════════════════════════════════════════════════════════════════════════════════╗
+║                             CONCATENATION & OUTPUT PROJECTION ($h = 2$)                               ║
+╠══════════════════════════════════════════════════════════════════════════════════════════════════════╣
+║                                                                                                      ║
+║   Head 1 Output (Z¹)         Head 2 Output (Z²)                                                      ║
+║   ┌───────────────────┐      ┌───────────────────┐                                                   ║
+║   │ y_money^(1) (1×4) │      │ y_money^(2) (1×4) │                                                   ║
+║   ├───────────────────┤      ├───────────────────┤                                                   ║
+║   │ y_bank^(1)  (1×4) │      │ y_bank^(2)  (1×4) │                                                   ║
+║   └───────────────────┘      └───────────────────┘                                                   ║
+║          (2 × 4)                    (2 × 4)                                                          ║
+║             │                          │                                                             ║
+║             └───────────┬──────────────┘                                                             ║
+║                         ▼  [Concatenate horizontally along feature dimension]                        ║
+║                     Z' = [Z¹, Z²]                                                                    ║
+║                        (2 × 8)                                                                       ║
+║             ┌─────────────────────────────┐         Linear Transformation Weights                    ║
+║             │ [y_money^(1) , y_money^(2)] │                       W^O                                ║
+║             ├─────────────────────────────┤                     (8 × 4)                              ║
+║             │ [y_bank^(1)  , y_bank^(2)]  │      ×      ┌─────────────────────┐                      ║
+║             └─────────────────────────────┘             │  w_11  ...  w_14    │                      ║
+║                                                         │   :             :   │                      ║
+║                                                         │  w_81  ...  w_84    │                      ║
+║                                                         └─────────────────────┘                      ║
+║                                                                    │                                 ║
+║                                                                    ▼                                 ║
+║                                                        Final Output Matrix Z                         ║
+║                                                               (2 × 4)                                ║
+║                                                         ┌─────────────────────┐                      ║
+║                                                money ──>│   y_money  (1 × 4)  │                      ║
+║                                                         ├─────────────────────┤                      ║
+║                                                 bank ──>│   y_bank   (1 × 4)  │                      ║
+║                                                         └─────────────────────┘                      ║
+║                                                                                                      ║
+║   Dimension Consistency Verification:                                                                ║
+║   (2 × 8)  ×  (8 × 4)  =  (2 × 4)                                                                    ║
+║    [Z']         [W^O]       [Z]                                                                      ║
+╚══════════════════════════════════════════════════════════════════════════════════════════════════════╝
+```
 
-> [!TIP] **Why does Multi-Head Attention not cost more compute?**  
-> Because each head operates on projected subspace dimension $d_k = d_{model} / h = 64$, computing 8 heads of dimension 64 has essentially the exact same computational cost as running 1 single head of dimension 512, while providing 8 distinct representation perspectives!
+> [!NOTE] **Why Do We Need the Output Projection Matrix $W^O$?**  
+> 1. **Dimensionality Restoration:** Concatenating $h$ heads inflates the feature dimension from $d_v$ to $h \times d_v$. Multiplying by $W^O \in \mathbb{R}^{(h \cdot d_v) \times d_{model}}$ compresses the representation back to the model dimension $d_{model}$ so subsequent layers (like Feed-Forward Networks or next Attention blocks) receive consistent tensor dimensions.
+> 2. **Cross-Head Information Mixing:** Simply concatenating heads keeps their features partitioned in separate blocks. $W^O$ acts as a learnable linear synthesizer that allows representations from different heads to blend and interact.
+
+---
+
+## 6. Standard Transformer Architecture: Full 8-Head Vectorized Computation (Vaswani et al. 2017)
+
+*(As drawn on the Lecture Chalkboard: `assets/mha_vaswani_8heads_computation.jpg`)*
+
+In the seminal paper *"Attention Is All You Need"* (Vaswani et al., 2017), the Transformer employs **$h = 8$ parallel attention heads** operating on a global model dimension of **$d_{model} = 512$**.
+
+### Core Dimensional Arithmetic:
+- **Tokens ($T$):** 2 tokens (`"money"`, `"bank"`) $\implies T = 2$
+- **Input Embeddings ($X$):** Shape $[2 \times 512]$ (rows $e_{money}$ and $e_{bank}$ each of $512$ dimensions)
+- **Number of Heads ($h$):** $8$
+- **Subspace Dimension per Head ($d_k = d_v$):**
+  $$d_k = d_v = \frac{d_{model}}{h} = \frac{512}{8} = 64 \quad \left(\frac{1}{8}\text{th of total dimension}\right)$$
+- **Concatenated Dimension before $W^O$:** $8 \times 64 = 512$
+- **Linear Output Projection Matrix ($W^O$):** Shape $[512 \times 512]$
+- **Final Output ($Z$):** Shape $[2 \times 512]$
+
+---
+
+### Blackboard Computation Diagram: Full 8-Head Pipeline
+
+```
+╔══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
+║                                 ATTENTION IS ALL YOU NEED: 8-HEAD VECTORIZED PIPELINE (h = 8)                                            ║
+╠══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╣
+║                                                                                                                                          ║
+║   [Input Matrix X]                     [8 Parallel Subspace Projections]                        [Concatenation]         [Output Linear]  ║
+║      (2 × 512)                           (Each head: 512 -> 64 dim)                                (2 × 512)               Projection    ║
+║                                                                                                                                          ║
+║                          ┌──> [Head 1] Wq¹, Wk¹, Wv¹ (512×64) ──> Q¹, K¹, V¹ (2×64) ──> Z¹ (2×64) ──┐                                   ║
+║                          │                                                                           │                                   ║
+║                          ├──> [Head 2] Wq², Wk², Wv² (512×64) ──> Q², K², V² (2×64) ──> Z² (2×64) ──┤                                   ║
+║   ┌──────────────────┐   │                                                                           │      ┌─────────────────────┐      ║
+║   │ e_money  (1×512) │───┼──> [Head 3] Wq³, Wk³, Wv³ (512×64) ──> Q³, K³, V³ (2×64) ──> Z³ (2×64) ──┤      │  W^O (512 × 512)    │      ║
+║   ├──────────────────┤   │     :                                                                     ├───>  │  Linear Projection  │      ║
+║   │ e_bank   (1×512) │   │     :                                                                     │      └─────────────────────┘      ║
+║   └──────────────────┘   │     :                                                                     │                 │                 ║
+║                          └──> [Head 8] Wq⁸, Wk⁸, Wv⁸ (512×64) ──> Q⁸, K⁸, V⁸ (2×64) ──> Z⁸ (2×64) ──┘                 ▼                 ║
+║                                                                                                               [Final Output Matrix Z]    ║
+║                                                                                                                      (2 × 512)           ║
+║                                                                                                              ┌─────────────────────┐     ║
+║                                                                                                     money ──>│   y_money (1 × 512) │     ║
+║                                                                                                              ├─────────────────────┤     ║
+║                                                                                                      bank ──>│   y_bank  (1 × 512) │     ║
+║                                                                                                              └─────────────────────┘     ║
+║                                                                                                                                          ║
+║   Matrix Dimensions Step-by-Step:                                                                                                        ║
+║   1. Per-Head Projections : [2 × 512]  ×  [512 × 64]  =  [2 × 64]   (for Q, K, V in each of the 8 heads)                                 ║
+║   2. Scaled Self-Attention: Softmax([2 × 64] × [64 × 2] / √64) × [2 × 64]  =  [2 × 64]   (Z^i output per head)                             ║
+║   3. Horizontal Concat    : [Z¹, Z², ..., Z⁸]  =  [2 × (64 + 64 + ... 8 times)]  =  [2 × 512]                                            ║
+║   4. Output Linear Project: [2 × 512]  ×  [512 × 512]  =  [2 × 512]   (Final Contextual Embedding Matrix Z)                              ║
+╚══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
+```
+
+### Visual Pipeline Flowchart (Mermaid)
+
+```mermaid
+flowchart LR
+    classDef inputStyle fill:#FFF3CD,stroke:#D39E00,stroke-width:2px,color:#000;
+    classDef headStyle fill:#D1ECF1,stroke:#17A2B8,stroke-width:2px,color:#000;
+    classDef concatStyle fill:#FFEAA7,stroke:#E17055,stroke-width:2px,color:#000;
+    classDef woStyle fill:#FDEBD0,stroke:#E67E22,stroke-width:2px,color:#000;
+    classDef outStyle fill:#E8DAEF,stroke:#8E44AD,stroke-width:3px,color:#000;
+
+    subgraph Inputs["1. Input Tokens & Embeddings"]
+        X["Token Matrix X<br/><b>[2 × 512]</b><br/>Rows: e_money, e_bank"]:::inputStyle
+    end
+
+    subgraph Heads["2. Eight Parallel Subspaces (d_k = 64)"]
+        direction TB
+        H1["Head 1: (Wq¹, Wk¹, Wv¹)<br/>[512 × 64] ➔ Q¹, K¹, V¹ [2 × 64]<br/>Output: Z¹ [2 × 64]"]:::headStyle
+        H2["Head 2: (Wq², Wk², Wv²)<br/>[512 × 64] ➔ Q², K², V² [2 × 64]<br/>Output: Z² [2 × 64]"]:::headStyle
+        HDots["... Heads 3 through 7 ...<br/>Each: [512 × 64] ➔ [2 × 64]"]:::headStyle
+        H8["Head 8: (Wq⁸, Wk⁸, Wv⁸)<br/>[512 × 64] ➔ Q⁸, K⁸, V⁸ [2 × 64]<br/>Output: Z⁸ [2 × 64]"]:::headStyle
+    end
+
+    subgraph ConcatBlock["3. Concatenation"]
+        ZConcat["Z_concat = [Z¹ ... Z⁸]<br/>64 × 8 = <b>512</b><br/>Shape: <b>[2 × 512]</b>"]:::concatStyle
+    end
+
+    subgraph OutProj["4. Linear Output Projection"]
+        WO["Matrix W^O<br/><b>[512 × 512]</b><br/>Linear Projection"]:::woStyle
+        ZFinal["Final Output Matrix Z<br/><b>[2 × 512]</b><br/>Row 1: y_money (512)<br/>Row 2: y_bank (512)"]:::outStyle
+    end
+
+    X --> H1 --> ZConcat
+    X --> H2 --> ZConcat
+    X --> HDots --> ZConcat
+    X --> H8 --> ZConcat
+    ZConcat --> WO --> ZFinal
+```
+
+### Parameter Reference & Dimensions Table:
+
+| Component | Symbol | Shape / Dimensions | Description |
+|---|---|---|---|
+| Input Sequence Matrix | $X$ | $[2 \times 512]$ | 2 tokens (`"money"`, `"bank"`), $d_{model} = 512$ |
+| Per-Head Query Weights | $W_q^{(i)}$ | $[512 \times 64]$ | Projects $512 \to 64$ ($1/8\text{th}$ subspace) |
+| Per-Head Key Weights | $W_k^{(i)}$ | $[512 \times 64]$ | Projects $512 \to 64$ ($1/8\text{th}$ subspace) |
+| Per-Head Value Weights | $W_v^{(i)}$ | $[512 \times 64]$ | Projects $512 \to 64$ ($1/8\text{th}$ subspace) |
+| Per-Head Output Matrix | $Z^{(i)}$ | $[2 \times 64]$ | Self-attention output for head $i \in \{1, \dots, 8\}$ |
+| Concatenated Output | $Z_{\text{concat}}$ | $[2 \times 512]$ | Horizontal concatenation $[Z^{(1)}, \dots, Z^{(8)}]$ |
+| Output Projection Matrix | $W^O$ | $[512 \times 512]$ | Synthesizes all 8 heads back into $d_{model}$ |
+| Final Contextual Embeddings | $Z$ | $[2 \times 512]$ | Row 1: $y_{money}$, Row 2: $y_{bank}$ |
+
+> [!TIP] **Why does Multi-Head Attention not cost 8× more compute?**  
+> Because each head operates on projected subspace dimension $d_k = d_{model} / h = 64$, computing 8 heads of dimension 64 has essentially the exact same computational cost as running 1 single head of dimension 512:
+> $$8 \times \mathcal{O}(T^2 \cdot 64) = \mathcal{O}(T^2 \cdot 512)$$
+> This allows the model to capture 8 completely distinct linguistic perspectives (syntactic roles, long-range dependencies, coreference, semantics) simultaneously with zero additional computational overhead!
 
 ---
 
@@ -292,13 +437,15 @@ In production Transformers (like BERT-base and standard Transformer):
 
 All lecture whiteboard drawings for Multi-Head Attention have been copied into your workspace:
 
-| Topic | Visual Reference |
-|---|---|
-| **Linguistic Motivation & 2 Heads Overview** | ![MHA Motivation Overview](assets/mha_motivation_overview.jpg) |
-| **Independent Projections ($W_q, W_k, W_v$)** | ![MHA Projections Branching](assets/mha_projections_branching.jpg) |
-| **Parallel Execution on Word 'Bank'** | ![MHA Bank Two Heads](assets/mha_bank_two_heads.jpg) |
-| **Multi-Head Black Box Module (8 Heads)** | ![MHA Block Diagram](assets/mha_block_diagram_8heads.jpg) |
-| **Matrix Dimensions & Concat with $W_o$ (2×4)** | ![MHA Matrix Dimensions](assets/mha_matrix_dimensions_2heads.jpg) |
+| Topic | Visual Reference | Key Details |
+|---|---|---|
+| **Linguistic Motivation & 2 Heads Overview** | ![MHA Motivation Overview](assets/mha_motivation_overview.jpg) | Telescope ambiguity & subspace intuition |
+| **Independent Projections ($W_q, W_k, W_v$)** | ![MHA Projections Branching](assets/mha_projections_branching.jpg) | Branching projections for word `"money"` |
+| **Parallel Execution on Word 'Bank'** | ![MHA Bank Two Heads](assets/mha_bank_two_heads.jpg) | Step-by-step parallel dot-product trace |
+| **Concatenation & Output Matrix $W^O$ (2 Heads)** | ![MHA Concat and W_O](assets/mha_concat_wo_2heads.jpg) | $(2 \times 8) \times (8 \times 4) = (2 \times 4)$ |
+| **Full 8-Head Vectorized Computation (Vaswani)** | ![MHA Vaswani 8 Heads](assets/mha_vaswani_8heads_computation.jpg) | $512 \to 64$ dim ($1/8\text{th}$), concat $512$, $W^O$ $512 \times 512$ |
+| **Multi-Head Black Box Module (8 Heads)** | ![MHA Block Diagram](assets/mha_block_diagram_8heads.jpg) | High-level container architecture |
+| **Matrix Dimensions & Concat with $W_o$ (2×4)** | ![MHA Matrix Dimensions](assets/mha_matrix_dimensions_2heads.jpg) | Pedagogical $2 \times 4$ dimensions |
 
 ---
 

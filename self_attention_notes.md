@@ -16,24 +16,29 @@ In standard static word embeddings (like Word2Vec or GloVe), a word like **"bank
 
 ```mermaid
 flowchart LR
+    classDef inputStyle fill:#FFF3CD,stroke:#D39E00,stroke-width:2px,color:#000;
+    classDef embStyle fill:#FEF9E7,stroke:#F1C40F,stroke-width:2px,color:#000;
+    classDef saStyle fill:#E8F8F5,stroke:#1ABC9C,stroke-width:2px,color:#000;
+    classDef outStyle fill:#E8DAEF,stroke:#8E44AD,stroke-width:2px,color:#000;
+
     subgraph Inputs["1. Input Tokens"]
-        w1["'money'"]
-        w2["'bank'"]
+        w1["'money'"]:::inputStyle
+        w2["'bank'"]:::inputStyle
     end
 
     subgraph Embeddings["2. Word Embeddings"]
-        e1["e_money"]
-        e2["e_bank"]
+        e1["e_money"]:::embStyle
+        e2["e_bank"]:::embStyle
     end
 
     subgraph SelfAttention["3. Self-Attention Block"]
         direction TB
-        SA["Linear Projections (Wq, Wk, Wv)<br/>Scaled Dot-Product Attention<br/>Softmax Normalization"]
+        SA["Linear Projections (Wq, Wk, Wv)<br/>Scaled Dot-Product Attention<br/>Softmax Normalization"]:::saStyle
     end
 
     subgraph Outputs["4. Contextual Embeddings"]
-        y1["y_money"]
-        y2["y_bank (Context: Financial)"]
+        y1["y_money"]:::outStyle
+        y2["y_bank (Context: Financial)"]:::outStyle
     end
 
     w1 --> e1 --> SA
@@ -60,24 +65,29 @@ v_{money} &= e_{money} W_v, & v_{bank} &= e_{bank} W_v
 
 ```mermaid
 flowchart TD
+    classDef embStyle fill:#FEF9E7,stroke:#F1C40F,stroke-width:2px,color:#000;
+    classDef qStyle fill:#D4EDDA,stroke:#28A745,stroke-width:2px,color:#000;
+    classDef kStyle fill:#F8D7DA,stroke:#DC3545,stroke-width:2px,color:#000;
+    classDef vStyle fill:#D1ECF1,stroke:#17A2B8,stroke-width:2px,color:#000;
+
     subgraph Inputs["Input Embeddings"]
-        em["e_money"]
-        eb["e_bank"]
+        em["e_money"]:::embStyle
+        eb["e_bank"]:::embStyle
     end
 
     subgraph Weights["Projection Weight Matrices"]
-        Wq["W_q<br/>(Query)"]
-        Wk["W_k<br/>(Key)"]
-        Wv["W_v<br/>(Value)"]
+        Wq["W_q<br/>(Query)"]:::qStyle
+        Wk["W_k<br/>(Key)"]:::kStyle
+        Wv["W_v<br/>(Value)"]:::vStyle
     end
 
     subgraph Vectors["Q, K, V Vectors"]
-        qm["q_money"]
-        qb["q_bank"]
-        km["k_money"]
-        kb["k_bank"]
-        vm["v_money"]
-        vb["v_bank"]
+        qm["q_money"]:::qStyle
+        qb["q_bank"]:::qStyle
+        km["k_money"]:::kStyle
+        kb["k_bank"]:::kStyle
+        vm["v_money"]:::vStyle
+        vb["v_bank"]:::vStyle
     end
 
     em --> Wq --> qm
@@ -100,101 +110,112 @@ Below is the complete computational diagram matching the chalkboard/whiteboard s
 
 ```mermaid
 flowchart TD
+    classDef qStyle fill:#D4EDDA,stroke:#28A745,stroke-width:2px,color:#000;
+    classDef kStyle fill:#F8D7DA,stroke:#DC3545,stroke-width:2px,color:#000;
+    classDef scoreStyle fill:#FFF9C4,stroke:#FBC02D,stroke-width:2px,color:#000;
+    classDef scaleStyle fill:#FFEAA7,stroke:#E17055,stroke-width:2px,color:#000;
+    classDef softStyle fill:#FDEBD0,stroke:#E67E22,stroke-width:2px,color:#000;
+    classDef wStyle fill:#D5F5E3,stroke:#27AE60,stroke-width:2px,color:#000;
+    classDef vStyle fill:#D1ECF1,stroke:#17A2B8,stroke-width:2px,color:#000;
+    classDef multStyle fill:#EBF5FB,stroke:#2980B9,stroke-width:2px,color:#000;
+    classDef addStyle fill:#FCF3CF,stroke:#F39C12,stroke-width:2px,color:#000;
+    classDef outStyle fill:#E8DAEF,stroke:#8E44AD,stroke-width:3px,color:#000;
+
     %% Left Branch: Output for 'money'
     subgraph BranchMoney["Computation for 'money' (y_money)"]
         direction TB
-        qm1["q_money (Query 1)"]
-        km1["k_money (Key 1)"]
-        kb1["k_bank (Key 2)"]
+        qm1["q_money (Query 1)"]:::qStyle
+        km1["k_money (Key 1)"]:::kStyle
+        kb1["k_bank (Key 2)"]:::kStyle
 
-        dot11["s11 = q_money · k_money"]
-        dot12["s12 = q_money · k_bank"]
+        dot11["s11 = q_money · k_money"]:::scoreStyle
+        dot12["s12 = q_money · k_bank"]:::scoreStyle
 
         qm1 --- km1 --> dot11
         qm1 --- kb1 --> dot12
 
-        scale1["Scaling: 1 / sqrt(d_k)"]
+        scale1["Scaling: 1 / sqrt(d_k)"]:::scaleStyle
         dot11 --> scale1
         dot12 --> scale1
 
-        s11_prime["s11'"]
-        s12_prime["s12'"]
+        s11_prime["s11'"]:::scoreStyle
+        s12_prime["s12'"]:::scoreStyle
         scale1 --> s11_prime
         scale1 --> s12_prime
 
-        soft1["Softmax"]
+        soft1["Softmax"]:::softStyle
         s11_prime --> soft1
         s12_prime --> soft1
 
-        w11["w11"]
-        w12["w12"]
+        w11["w11"]:::wStyle
+        w12["w12"]:::wStyle
         soft1 --> w11
         soft1 --> w12
 
-        vm1["v_money"]
-        vb1["v_bank"]
+        vm1["v_money"]:::vStyle
+        vb1["v_bank"]:::vStyle
 
-        mult11["w11 × v_money"]
-        mult12["w12 × v_bank"]
+        mult11["w11 × v_money"]:::multStyle
+        mult12["w12 × v_bank"]:::multStyle
         w11 --> mult11
         vm1 --> mult11
         w12 --> mult12
         vb1 --> mult12
 
-        add1["+ (Sum)"]
+        add1["+ (Sum)"]:::addStyle
         mult11 --> add1
         mult12 --> add1
 
-        ymoney["y_money"]
+        ymoney["y_money"]:::outStyle
         add1 --> ymoney
     end
 
     %% Right Branch: Output for 'bank'
     subgraph BranchBank["Computation for 'bank' (y_bank)"]
         direction TB
-        qb2["q_bank (Query 2)"]
-        km2["k_money (Key 1)"]
-        kb2["k_bank (Key 2)"]
+        qb2["q_bank (Query 2)"]:::qStyle
+        km2["k_money (Key 1)"]:::kStyle
+        kb2["k_bank (Key 2)"]:::kStyle
 
-        dot21["s21 = q_bank · k_money"]
-        dot22["s22 = q_bank · k_bank"]
+        dot21["s21 = q_bank · k_money"]:::scoreStyle
+        dot22["s22 = q_bank · k_bank"]:::scoreStyle
 
         qb2 --- km2 --> dot21
         qb2 --- kb2 --> dot22
 
-        scale2["Scaling: 1 / sqrt(d_k)"]
+        scale2["Scaling: 1 / sqrt(d_k)"]:::scaleStyle
         dot21 --> scale2
         dot22 --> scale2
 
-        s21_prime["s21'"]
-        s22_prime["s22'"]
+        s21_prime["s21'"]:::scoreStyle
+        s22_prime["s22'"]:::scoreStyle
         scale2 --> s21_prime
         scale2 --> s22_prime
 
-        soft2["Softmax"]
+        soft2["Softmax"]:::softStyle
         s21_prime --> soft2
         s22_prime --> soft2
 
-        w21["w21"]
-        w22["w22"]
+        w21["w21"]:::wStyle
+        w22["w22"]:::wStyle
         soft2 --> w21
         soft2 --> w22
 
-        vm2["v_money"]
-        vb2["v_bank"]
+        vm2["v_money"]:::vStyle
+        vb2["v_bank"]:::vStyle
 
-        mult21["w21 × v_money"]
-        mult22["w22 × v_bank"]
+        mult21["w21 × v_money"]:::multStyle
+        mult22["w22 × v_bank"]:::multStyle
         w21 --> mult21
         vm2 --> mult21
         w22 --> mult22
         vb2 --> mult22
 
-        add2["+ (Sum)"]
+        add2["+ (Sum)"]:::addStyle
         mult21 --> add2
         mult22 --> add2
 
-        ybank["y_bank"]
+        ybank["y_bank"]:::outStyle
         add2 --> ybank
     end
 ```
@@ -204,41 +225,41 @@ flowchart TD
 ### Pictographic Box-Drawing Representation (Matching Original Diagram Layout)
 
 ```
-======================================================================================================================
-               WORD 1: 'money'                                            WORD 2: 'bank'
-======================================================================================================================
-
-     [q_money]      [q_money]                                  [q_bank]       [q_bank]
-    (horizontal)   (horizontal)                               (horizontal)   (horizontal)
-         |              |                                          |              |
-         • (dot)        • (dot)                                    • (dot)        • (dot)
-         |              |                                          |              |
-    ┌─────────┐    ┌─────────┐                                ┌─────────┐    ┌─────────┐
-    │ k_money │    │ k_bank  │                                │ k_money │    │ k_bank  │
-    └─────────┘    └─────────┘                                └─────────┘    └─────────┘
-    (vertical)     (vertical)                                 (vertical)     (vertical)
-         │              │                                          │              │
-        s11            s12                                        s21            s22
-         │              │                                          │              │
-         ▼              ▼                                          ▼              ▼
-    ┌─────────────────────────┐                               ┌─────────────────────────┐
-    │   Scaling (1/√d_k)      │                               │   Scaling (1/√d_k)      │
-    └─────────────────────────┘                               └─────────────────────────┘
-         │              │                                          │              │
-        s11'           s12'                                       s21'           s22'
-         ▼              ▼                                          ▼              ▼
-    ┌─────────────────────────┐                               ┌─────────────────────────┐
-    │        Softmax          │                               │        Softmax          │
-    └─────────────────────────┘                               └─────────────────────────┘
-         │              │                                          │              │
-        w11            w12                                        w21            w22
-         │              │                                          │              │
-         ▼              ▼                                          ▼              ▼
-     w11 × [v_money] + w12 × [v_bank]                          w21 × [v_money] + w22 × [v_bank]
-                   │                                                         │
-                   ▼                                                         ▼
-               [y_money]                                                 [y_bank]
-======================================================================================================================
+╔══════════════════════════════════════════════════════════════════════════════════════════════════════╗
+║              WORD 1: 'money'                                            WORD 2: 'bank'               ║
+╠══════════════════════════════════════════════════════════════════════════════════════════════════════╣
+║                                                                                                      ║
+║     [q_money]      [q_money]                                  [q_bank]       [q_bank]                ║
+║    (horizontal)   (horizontal)                               (horizontal)   (horizontal)             ║
+║         |              |                                          |              |                   ║
+║         • (dot)        • (dot)                                    • (dot)        • (dot)             ║
+║         |              |                                          |              |                   ║
+║    ┌─────────┐    ┌─────────┐                                ┌─────────┐    ┌─────────┐              ║
+║    │ k_money │    │ k_bank  │                                │ k_money │    │ k_bank  │              ║
+║    └─────────┘    └─────────┘                                └─────────┘    └─────────┘              ║
+║    (vertical)     (vertical)                                 (vertical)     (vertical)               ║
+║         │              │                                          │              │                   ║
+║        s11            s12                                        s21            s22                  ║
+║         │              │                                          │              │                   ║
+║         ▼              ▼                                          ▼              ▼                   ║
+║    ┌─────────────────────────┐                               ┌─────────────────────────┐             ║
+║    │   Scaling (1/√d_k)      │                               │   Scaling (1/√d_k)      │             ║
+║    └─────────────────────────┘                               └─────────────────────────┘             ║
+║         │              │                                          │              │                   ║
+║        s11'           s12'                                       s21'           s22'                 ║
+║         ▼              ▼                                          ▼              ▼                   ║
+║    ┌─────────────────────────┐                               ┌─────────────────────────┐             ║
+║    │        Softmax          │                               │        Softmax          │             ║
+║    └─────────────────────────┘                               └─────────────────────────┘             ║
+║         │              │                                          │              │                   ║
+║        w11            w12                                        w21            w22                  ║
+║         │              │                                          │              │                   ║
+║         ▼              ▼                                          ▼              ▼                   ║
+║     w11 × [v_money] + w12 × [v_bank]                          w21 × [v_money] + w22 × [v_bank]        ║
+║                   │                                                         │                        ║
+║                   ▼                                                         ▼                        ║
+║               [y_money]                                                 [y_bank]                     ║
+╚══════════════════════════════════════════════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -325,29 +346,37 @@ Let $n$ denote the hidden/embedding dimension ($d_k = d_v = n$).
 
 ```mermaid
 flowchart LR
+    classDef qStyle fill:#D4EDDA,stroke:#28A745,stroke-width:2px,color:#000;
+    classDef kStyle fill:#F8D7DA,stroke:#DC3545,stroke-width:2px,color:#000;
+    classDef sStyle fill:#FFF9C4,stroke:#FBC02D,stroke-width:2px,color:#000;
+    classDef softStyle fill:#FDEBD0,stroke:#E67E22,stroke-width:2px,color:#000;
+    classDef wStyle fill:#D5F5E3,stroke:#27AE60,stroke-width:2px,color:#000;
+    classDef vStyle fill:#D1ECF1,stroke:#17A2B8,stroke-width:2px,color:#000;
+    classDef yStyle fill:#E8DAEF,stroke:#8E44AD,stroke-width:3px,color:#000;
+
     subgraph Step1["1. Matrix Dot Product"]
-        Q["Matrix Q<br/><b>[3 × n]</b><br/>Rows: q_money, q_bank, q_grows"]
-        K["Matrix K^T<br/><b>[n × 3]</b><br/>Cols: k_money, k_bank, k_grows"]
+        Q["Matrix Q<br/><b>[3 × n]</b><br/>Rows: q_money, q_bank, q_grows"]:::qStyle
+        K["Matrix K^T<br/><b>[n × 3]</b><br/>Cols: k_money, k_bank, k_grows"]:::kStyle
         Dot["Dot Product<br/>(Q · K^T)"]
         Q --> Dot
         K --> Dot
     end
 
     subgraph Step2["2. Attention Score Matrix S"]
-        S["Score Matrix S<br/><b>[3 × 3]</b><br/>[s11, s12, s13]<br/>[s21, s22, s23]<br/>[s31, s32, s33]"]
+        S["Score Matrix S<br/><b>[3 × 3]</b><br/>[s11, s12, s13]<br/>[s21, s22, s23]<br/>[s31, s32, s33]"]:::sStyle
         Dot --> S
     end
 
     subgraph Step3["3. Softmax Normalization"]
-        Soft["Softmax<br/>(Applied row-wise)"]
-        W["Attention Weights W<br/><b>[3 × 3]</b><br/>[w11, w12, w13]<br/>[w21, w22, w23]<br/>[w31, w32, w33]"]
+        Soft["Softmax<br/>(Applied row-wise)"]:::softStyle
+        W["Attention Weights W<br/><b>[3 × 3]</b><br/>[w11, w12, w13]<br/>[w21, w22, w23]<br/>[w31, w32, w33]"]:::wStyle
         S --> Soft --> W
     end
 
     subgraph Step4["4. Value Projection & Output"]
-        V["Matrix V<br/><b>[3 × n]</b><br/>Rows: v_money, v_bank, v_grows"]
+        V["Matrix V<br/><b>[3 × n]</b><br/>Rows: v_money, v_bank, v_grows"]:::vStyle
         Mult["Matrix Multiply<br/>(W · V)"]
-        Y["Contextual Embeddings Y<br/><b>[3 × n]</b><br/>Row 1: y_money<br/>Row 2: y_bank<br/>Row 3: y_grows"]
+        Y["Contextual Embeddings Y<br/><b>[3 × n]</b><br/>Row 1: y_money<br/>Row 2: y_bank<br/>Row 3: y_grows"]:::yStyle
         W --> Mult
         V --> Mult
         Mult --> Y
