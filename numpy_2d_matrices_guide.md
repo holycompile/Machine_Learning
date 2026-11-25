@@ -51,3 +51,58 @@ eye = np.eye(4)                        # Identity matrix (4, 4)
 - **Embedding lookup table**: `(vocab_size, d_model)`
 - **Linear layer weights**: `(d_in, d_out)`
 - **Self-attention score matrix**: `(T, T)` (every token attending to every other token)
+
+---
+
+## Part 2: 2D Slicing, Axis Reductions & Matrix Multiplication
+
+### 2D Slicing: `M[row_slice, col_slice]`
+
+```text
+M = [[10, 11, 12, 13],
+     [20, 21, 22, 23],
+     [30, 31, 32, 33]]   # shape: (3, 4)
+```
+
+- `M[0, :]` (or `M[0]`) -> `[10, 11, 12, 13]` (entire row 0 -> 1D shape `(4,)`)
+- `M[:, 1]` -> `[11, 21, 31]` (entire column 1 -> 1D shape `(3,)`)
+- `M[0:2, 1:3]` -> `[[11, 12], [21, 22]]` (2x2 sub-matrix -> 2D shape `(2, 2)`)
+- `M[-1, :]` -> `[30, 31, 32, 33]` (last token's features in a sequence!)
+
+### Reductions Along `axis=0` vs `axis=1`
+
+Understanding `axis` is crucial for Softmax and LayerNorm:
+
+```text
+          axis=1 (across columns / features) --->
+        +----+----+----+----+
+        | 10 | 11 | 12 | 13 |  -> np.sum(M, axis=1, keepdims=True) -> [[46]]
+        +----+----+----+----+
+        | 20 | 21 | 22 | 23 |                                      -> [[86]]
+        +----+----+----+----+
+          |    |    |    |
+          v    v    v    v     axis=0 (down rows / tokens)
+        [[30, 32, 34, 36]]     <- np.sum(M, axis=0, keepdims=True)
+```
+
+- `axis=0` collapses **rows** (computes stats **per feature** across all tokens/samples).
+- `axis=1` collapses **columns** (computes stats **per token/row** across all features — used in **Softmax** & **LayerNorm**!).
+- Always pass `keepdims=True` when you plan to divide or subtract back into `M` via broadcasting!
+
+### Transpose (`.T`) & Matrix Multiplication (`@`)
+
+- **Transpose (`A.T`)**: Swaps rows and columns. Shape `(T, d_k)` becomes `(d_k, T)`.
+- **Matrix Multiplication (`A @ B`)**: Inner dimensions must match:
+
+```text
+(m, k) @ (k, n)  --->  (m, n)
+    ^     ^
+    +-----+-- must match!
+```
+
+```python
+X = np.random.randn(3, 4)   # (T=3, d_model=4)
+W = np.random.randn(4, 2)   # (d_model=4, d_k=2)
+
+out = X @ W                 # (3, 4) @ (4, 2) -> (3, 2)
+```
