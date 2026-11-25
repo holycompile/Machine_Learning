@@ -106,3 +106,61 @@ W = np.random.randn(4, 2)   # (d_model=4, d_k=2)
 
 out = X @ W                 # (3, 4) @ (4, 2) -> (3, 2)
 ```
+
+---
+
+## Part 3: 2D Matrices in ML & Building Self-Attention
+
+Almost every core Transformer operation on a single sequence `(T, d_model)` is 2D matrix math:
+
+### 1. Linear Layer (`Y = X @ W + b`)
+
+- `X`: `(T, d_model)`
+- `W`: `(d_model, d_k)`
+- `b`: `(d_k,)` -> broadcasts across all `T` rows!
+
+```python
+T, d_model, d_k = 4, 8, 4
+X = np.random.randn(T, d_model)
+W_q = np.random.randn(d_model, d_k) * 0.1
+b_q = np.zeros(d_k)
+
+Q = X @ W_q + b_q   # shape: (4, 4)
+```
+
+### 2. Full 2D Scaled Dot-Product Self-Attention (Single Sequence)
+
+$$\text{Attention}(Q, K, V) = \text{softmax}\left(\frac{Q K^T}{\sqrt{d_k}} + M\right) V$$
+
+Let's trace every shape step by step:
+1. `Q = X @ W_q`, `K = X @ W_k`, `V = X @ W_v` -> each `(T, d_k)`
+2. `scores = (Q @ K.T) / np.sqrt(d_k)` -> `(T, d_k) @ (d_k, T) = (T, T)`
+3. Add causal mask `M` (`(T, T)`): upper triangle set to `-1e9` so token `i` cannot peek at future tokens `j > i`.
+4. `weights = softmax(scores, axis=-1)` -> `(T, T)` (each row sums to `1.0`)
+5. `out = weights @ V` -> `(T, T) @ (T, d_k) = (T, d_k)`
+
+```python
+def softmax_2d(x: np.ndarray) -> np.ndarray:
+    shifted = x - np.max(x, axis=-1, keepdims=True)
+    exp_x = np.exp(shifted)
+    return exp_x / np.sum(exp_x, axis=-1, keepdims=True)
+
+def self_attention_2d(X: np.ndarray, W_q: np.ndarray, W_k: np.ndarray, W_v: np.ndarray, causal: bool = True) -> np.ndarray:
+    T, _ = X.shape
+    d_k = W_q.shape[1]
+
+    Q = X @ W_q
+    K = X @ W_k
+    V = X @ W_v
+
+    scores = (Q @ K.T) / np.sqrt(d_k)
+
+    if causal:
+        mask = np.triu(np.ones((T, T)), k=1) * -1e9
+        scores = scores + mask
+
+    weights = softmax_2d(scores)   # (T, T)
+    return weights @ V             # (T, d_k)
+```
+
+Notice how clean 2D is for **1 sequence** — now when we train on **batches of sequences** simultaneously (`B` sequences at once), we step up to **3D tensors `(B, T, d_model)`**!
