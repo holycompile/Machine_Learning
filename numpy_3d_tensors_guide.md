@@ -52,3 +52,48 @@ token_ids = np.array([
 X = E[token_ids]
 print("X.shape:", X.shape)  # (2, 3, 4)
 ```
+
+---
+
+## Part 2: 3D Slicing, `axis=-1` Reductions & Batched Matmul (`@`)
+
+### 3D Slicing: `X[batch_slice, time_slice, dim_slice]`
+
+Suppose `X` has shape `(B=2, T=5, D=8)`:
+
+- `X[0]` or `X[0, :, :]` -> shape `(5, 8)` (all tokens & features for **batch item 0**)
+- `X[:, -1, :]` -> shape `(2, 8)` (**last token's** embedding for every sequence in the batch — used for next-token prediction!)
+- `X[:, :-1, :]` -> shape `(2, 4, 8)` (all tokens except the last — autoregressive **inputs**)
+- `X[:, 1:, :]` -> shape `(2, 4, 8)` (all tokens shifted by 1 — autoregressive **targets**)
+- `X[:, :, :4]` -> shape `(2, 5, 4)` (first half of the feature dimensions)
+
+### Reductions on 3D Tensors (`axis=-1`)
+
+In Transformers, **Softmax** and **LayerNorm** almost always normalize across the **last axis (`axis=-1`)**:
+
+- For `X` of shape `(B, T, D)`:
+  - `np.mean(X, axis=-1, keepdims=True)` -> shape `(B, T, 1)` (mean of each token's `D` features).
+- For attention scores `S` of shape `(B, T, T)`:
+  - `softmax(S, axis=-1)` -> shape `(B, T, T)` (each query token's attention weights over all `T` key tokens sum to `1.0`).
+
+### Batched Matrix Multiplication (`@`) & `transpose`
+
+In NumPy, `@` on 3D arrays performs **batched matrix multiplication** over the last two axes `(T, D)`, while keeping the batch axis `B` aligned:
+
+```text
+(B, m, k) @ (B, k, n)  --->  (B, m, n)
+```
+
+Notice that `.T` on a 3D array reverses **all** axes `(B, T, D) -> (D, T, B)`, which is **NOT** what you want for `Q @ K^T`! Instead, swap only the last two axes:
+
+```python
+Q = np.random.randn(2, 5, 4)   # (B=2, T=5, d_k=4)
+K = np.random.randn(2, 5, 4)   # (B=2, T=5, d_k=4)
+
+# Swap only axes 1 and 2: (B, T, d_k) -> (B, d_k, T)
+K_T = K.transpose(0, 2, 1)     # or np.swapaxes(K, -2, -1)
+
+# Batched attention scores: (2, 5, 4) @ (2, 4, 5) -> (2, 5, 5)
+scores = Q @ K_T
+print("scores.shape:", scores.shape)  # (2, 5, 5)
+```
