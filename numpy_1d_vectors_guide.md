@@ -45,3 +45,60 @@ token_ids = np.array([101, 2054, 2003, 102])  # integer token IDs from a tokeniz
 - **Token IDs for one sentence**: `[101, 2054, 2003, 102]` has shape `(T,)` where `T` is sequence length.
 - **Bias vectors (`b`)**: Added to every token's representation, shape `(d_model,)`.
 - **Single token embedding**: One word/subword represented as a point in `d_model`-dimensional space, shape `(d_model,)`.
+
+---
+
+## Part 2: Indexing, Slicing & Basic 1D Operations
+
+### Indexing & Slicing (`start:stop:step`)
+
+```text
+x = [10, 20, 30, 40, 50, 60]
+      0   1   2   3   4   5    (positive indices)
+     -6  -5  -4  -3  -2  -1    (negative indices)
+```
+
+- `x[0]` -> `10` (first element)
+- `x[-1]` -> `60` (last element, e.g., last token logit in causal LM)
+- `x[1:4]` -> `[20, 30, 40]` (`stop` index 4 is **excluded**)
+- `x[:3]` -> `[10, 20, 30]` (first 3 elements, e.g., top-3 context tokens)
+- `x[::2]` -> `[10, 30, 50]` (every 2nd element — used in sin/cos positional encoding!)
+- `x[1::2]` -> `[20, 40, 60]` (odd indices — `cos` terms in Transformer positional encoding!)
+- `x[::-1]` -> `[60, 50, 40, 30, 20, 10]` (reversed)
+
+> **Important:** Slicing a NumPy array returns a **view**, not a copy! Modifying `sub = x[1:4]; sub[0] = 999` also mutates `x[1]`. Use `.copy()` if you need an independent array.
+
+### Element-Wise Operations & Reductions
+
+```python
+a = np.array([1.0, 2.0, 3.0])
+b = np.array([4.0, 5.0, 6.0])
+
+# Element-wise math (same shape required, or scalar broadcasting)
+add = a + b          # [5.0, 7.0, 9.0]  -> e.g., residual connection: x + sublayer_out
+mul = a * b          # [4.0, 10.0, 18.0] -> e.g., gating (SwiGLU / LayerNorm scale)
+scaled = a * 0.5     # [0.5, 1.0, 1.5]  -> scalar broadcasting
+
+# Reductions (collapse 1D -> scalar)
+s = np.sum(a)        # 6.0
+m = np.mean(a)       # 2.0  (used in LayerNorm!)
+std = np.std(a)      # 0.8165 (used in LayerNorm!)
+idx = np.argmax(b)   # 2    (greedy decoding: pick highest-logit token!)
+```
+
+### The Dot Product (`np.dot` / `@`)
+
+The **dot product** measures similarity/alignment between two 1D vectors of equal length:
+
+$$\mathbf{a} \cdot \mathbf{b} = \sum_{i=0}^{d-1} a_i b_i$$
+
+```python
+q = np.array([1.0, 0.5, -1.0])   # Query vector for 1 token
+k = np.array([0.8, 0.5, -0.5])   # Key vector for 1 token
+
+score = np.dot(q, k)   # or q @ k -> 1.0*0.8 + 0.5*0.5 + (-1.0)*(-0.5) = 1.55
+```
+
+- Large positive dot product -> vectors point in a similar direction (high attention).
+- Zero dot product -> orthogonal (unrelated).
+- Negative dot product -> opposite directions.
