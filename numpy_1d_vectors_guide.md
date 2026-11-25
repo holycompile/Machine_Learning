@@ -102,3 +102,72 @@ score = np.dot(q, k)   # or q @ k -> 1.0*0.8 + 0.5*0.5 + (-1.0)*(-0.5) = 1.55
 - Large positive dot product -> vectors point in a similar direction (high attention).
 - Zero dot product -> orthogonal (unrelated).
 - Negative dot product -> opposite directions.
+
+---
+
+## Part 3: 1D Vectors in Machine Learning & Building a Transformer
+
+In a Transformer, 1D arrays appear at key moments:
+
+1. **Token IDs** for a single prompt: `(T,)`
+2. **Logits** for the next-token prediction: `(vocab_size,)`
+3. **A single token's embedding**: `(d_model,)`
+4. **Learnable LayerNorm parameters (`gamma`, `beta`)** and **Linear layer biases (`b`)**: `(d_model,)`
+
+### 1. Numerically Stable Softmax on a 1D Logit Vector
+
+When a Transformer outputs raw scores (logits) for the next token over a vocabulary of size `V`, we convert that 1D vector into probabilities:
+
+```python
+def softmax_1d(logits: np.ndarray) -> np.ndarray:
+    # Subtract max for numerical stability (prevents exp() overflow)
+    shifted = logits - np.max(logits)
+    exp_vals = np.exp(shifted)
+    return exp_vals / np.sum(exp_vals)
+
+logits = np.array([2.0, 1.0, 0.1, -1.5])  # shape: (4,)
+probs = softmax_1d(logits)
+print("Probabilities:", np.round(probs, 4))  # sums to 1.0
+print("Predicted token ID:", np.argmax(probs))
+```
+
+### 2. Layer Normalization on a Single Token Vector `(d_model,)`
+
+LayerNorm normalizes a single token's feature vector across its `d_model` dimensions to have mean 0 and variance 1, then scales (`gamma`) and shifts (`beta`):
+
+```python
+def layer_norm_1d(x: np.ndarray, gamma: np.ndarray, beta: np.ndarray, eps: float = 1e-5) -> np.ndarray:
+    mean = np.mean(x)
+    var = np.var(x)
+    x_norm = (x - mean) / np.sqrt(var + eps)
+    return gamma * x_norm + beta
+
+x = np.array([1.2, -0.5, 3.1, 0.2])       # 1 token, d_model=4
+gamma = np.ones(4)
+beta = np.zeros(4)
+print("LayerNorm output:", np.round(layer_norm_1d(x, gamma, beta), 4))
+```
+
+### 3. Positional Encoding Trick Using 1D Slicing (`::2` and `1::2`)
+
+In *"Attention Is All You Need"*, even indices use `sin` and odd indices use `cos`:
+
+```python
+d_model = 8
+pos = 3
+pe = np.zeros(d_model)  # shape: (8,)
+
+div_term = np.exp(np.arange(0, d_model, 2) * -(np.log(10000.0) / d_model))
+pe[0::2] = np.sin(pos * div_term)   # even indices: 0, 2, 4, 6
+pe[1::2] = np.cos(pos * div_term)   # odd indices:  1, 3, 5, 7
+```
+
+### 4. Stepping Up from 1D to 2D (`reshape` / `np.newaxis`)
+
+To feed a 1D vector into matrix multiplication, you often promote `(N,)` to `(1, N)` or `(N, 1)`:
+
+```python
+v = np.array([1, 2, 3, 4])   # shape: (4,)
+row = v[np.newaxis, :]       # shape: (1, 4) -> 1 token with 4 features
+col = v[:, np.newaxis]       # shape: (4, 1) -> column vector
+```
