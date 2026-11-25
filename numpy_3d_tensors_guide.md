@@ -97,3 +97,78 @@ K_T = K.transpose(0, 2, 1)     # or np.swapaxes(K, -2, -1)
 scores = Q @ K_T
 print("scores.shape:", scores.shape)  # (2, 5, 5)
 ```
+
+---
+
+## Part 3: 3D Tensors in Building a Transformer (Batched Attention & Multi-Head Split)
+
+### 1. Projecting a 3D Tensor with a 2D Weight Matrix
+
+In NumPy, a 3D activation `(B, T, d_model)` can be multiplied directly by a 2D weight matrix `(d_model, d_k)`:
+
+```text
+(B, T, d_model) @ (d_model, d_k)  --->  (B, T, d_k)
+```
+
+NumPy broadcasts the 2D weight matrix across all `B` batch items automatically!
+
+```python
+B, T, d_model, d_k = 2, 5, 8, 4
+X = np.random.randn(B, T, d_model)
+W_q = np.random.randn(d_model, d_k) * 0.1
+
+Q = X @ W_q   # (2, 5, 8) @ (8, 4) -> (2, 5, 4)
+```
+
+### 2. Batched 3D Scaled Dot-Product Self-Attention
+
+```python
+def softmax_last_axis(x: np.ndarray) -> np.ndarray:
+    shifted = x - np.max(x, axis=-1, keepdims=True)
+    exp_x = np.exp(shifted)
+    return exp_x / np.sum(exp_x, axis=-1, keepdims=True)
+
+def batched_self_attention(X: np.ndarray, W_q: np.ndarray, W_k: np.ndarray, W_v: np.ndarray) -> np.ndarray:
+    B, T, _ = X.shape
+    d_k = W_q.shape[1]
+
+    Q = X @ W_q                                        # (B, T, d_k)
+    K = X @ W_k                                        # (B, T, d_k)
+    V = X @ W_v                                        # (B, T, d_k)
+
+    # (B, T, d_k) @ (B, d_k, T) -> (B, T, T)
+    scores = (Q @ np.swapaxes(K, -2, -1)) / np.sqrt(d_k)
+
+    # 2D causal mask (T, T) broadcasts across batch axis B -> (B, T, T)
+    mask = np.triu(np.ones((T, T)), k=1) * -1e9
+    scores = scores + mask
+
+    weights = softmax_last_axis(scores)                # (B, T, T)
+    return weights @ V                                 # (B, T, d_k)
+```
+
+### 3. Splitting & Merging Heads (`3D -> 4D -> 3D`)
+
+To run **Multi-Head Attention** with `H` heads (where `d_model = H * d_head`), you reshape the 3D tensor `(B, T, d_model)` into 4D `(B, H, T, d_head)` and merge it back to 3D afterward:
+
+```python
+B, T, d_model = 2, 5, 8
+H = 2
+d_head = d_model // H   # 4
+
+# 1. Split d_model into (H, d_head) and move H before T:
+# (B, T, d_model) -> (B, T, H, d_head) -> (B, H, T, d_head)
+X_heads = X.reshape(B, T, H, d_head).transpose(0, 2, 1, 3)
+
+# 2. After attention per head, merge heads back to 3D:
+# (B, H, T, d_head) -> (B, T, H, d_head) -> (B, T, d_model)
+X_merged = X_heads.transpose(0, 2, 1, 3).reshape(B, T, d_model)
+```
+
+### Summary: 1D -> 2D -> 3D in a Transformer
+
+| Dimension | Typical Shape | What It Represents |
+| :--- | :--- | :--- |
+| **1D** | `(d_model,)` or `(T,)` | Single token embedding, bias vector, or one sequence's token IDs |
+| **2D** | `(T, d_model)` or `(d_in, d_out)` | One sequence of tokens, linear weight matrix, or `(T, T)` attention map |
+| **3D** | `(B, T, d_model)` | A full **batch** of sequences flowing through Transformer blocks |
